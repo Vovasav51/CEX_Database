@@ -2,30 +2,62 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Переглядач біржових відповідей · укр</title>
-<link rel="preconnect" href="https://unpkg.com">
-<link rel="preconnect" href="https://cdn.jsdelivr.net">
-<style>
-  :root { --bg:#0b0e14; --card:#111624; --muted:#7d8da0; --text:#e8eef7; --accent:#5ac8fa; --ok:#22c55e; --bad:#ef4444; --border:#1e293b; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--text); }
-  .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
-  h1 { font-size: 22px; margin: 0 0 12px; }
-  .card { background: var(--card); border:1px solid var(--border); border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
-  .controls { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px; padding: 14px; }
-  .controls > * { min-width: 0; }
-  button, select, input[type="text"], input[type="file"] { width:100%; padding:10px 12px; border-radius: 12px; border:1px solid var(--border); background:#0f1422; color:var(--text); outline:none; }
-  button { background: #1f2937; cursor: pointer; }
-  button.primary { background: #2b3546; border-color:#2f3f5b; }
-  button:hover { filter: brightness(1.1); }
-  .btn-row { display:flex; gap:8px; justify-content:flex-end; grid-column: span 12; }
-  .badge { display:inline-block; padding:2px 8px; border-radius: 999px; font-size: 12px; }
-  .badge.in { background: rgba(34,197,94,0.15); color:#86efac; border:1px solid rgba(34,197,94,0.35); }
-  .badge.out{ background: rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.35); }
-  table { width: 100%; border-collapse: collapse; }
-  thead th { position: sticky; top: 0; background: #0f1422; z-index: 1; }
-  th, td { border-bottom:1px solid var(--border); padding: 8px 10px; text-align: left; white-space: nowrap; }
-  td.trunc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
-  .scroll { overflow:auto; max-height: 70vh; border-radius: 0 0 16px 16px; }
-  .hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+<title>Переглядач біржових відповідей</title>
+</head>
+<body>
+<h1>Переглядач біржових відповідей</h1>
+<div>
+    <button id="db-load">База: Завантажити</button>
+    <button id="db-save">База: Зберегти</button>
+</div>
+<table id="data-table" border="1">
+    <thead>
+        <tr>
+            <th>Дата</th><th>Біржа</th><th>Блокчейн</th><th>Актив</th>
+            <th>Сума</th><th>Напрямок</th><th>Від</th><th>До</th><th>Хеш</th><th>Файл</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<script>
+let rows = [];
+
+function renderTable() {
+    const tbody = document.querySelector('#data-table tbody');
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+        const tr = document.createElement('tr');
+        Object.values(r).forEach(val => {
+            const td = document.createElement('td');
+            td.textContent = val || '';
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+}
+
+async function loadFromDb(){
+    const r = await fetch('/api/fetch');
+    const j = await r.json();
+    rows = j.data || [];
+    renderTable();
+    alert('✅ Дані завантажені');
+}
+
+async function saveToDb(){
+    if (!rows.length) return alert('Немає даних');
+    const r = await fetch('/api/upload', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ rows })
+    });
+    const j = await r.json();
+    alert('✅ Записано: ' + j.inserted);
+}
+
+document.getElementById('db-load').addEventListener('click', loadFromDb);
+document.getElementById('db-save').addEventListener('click', saveToDb);
+</script>
+</body>
+</html>
