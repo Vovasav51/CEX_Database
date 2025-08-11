@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Переглядач біржових відповідей · укр</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; background: #0b0e14; color: #e8eef7; }
+  .container { max-width: 1200px; margin: auto; padding: 20px; }
+  h1 { font-size: 22px; margin-bottom: 10px; }
+  button, select, input { padding: 8px; border-radius: 5px; border: 1px solid #1e293b; background: #1f2937; color: #fff; }
+  button:hover { background: #374151; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { padding: 8px; border: 1px solid #1e293b; }
+  th { background: #111624; position: sticky; top: 0; }
+  .in { color: #86efac; }
+  .out { color: #fca5a5; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Переглядач біржових відповідей · укр</h1>
+  <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" multiple>
+  <input type="text" id="search" placeholder="Пошук...">
+  <select id="dir">
+    <option value="all">Усі операції</option>
+    <option value="in">Вхідні</option>
+    <option value="out">Вихідні</option>
+  </select>
+  <button id="btnExport">Експорт CSV</button>
+  <table>
+    <thead>
+      <tr>
+        <th>Час (UTC)</th>
+        <th>Біржа</th>
+        <th>Мережа</th>
+        <th>Актив</th>
+        <th>Сума</th>
+        <th>Напрям</th>
+        <th>From</th>
+        <th>To</th>
+        <th>Tx Hash</th>
+        <th>Файл</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="10" style="text-align:center;">Немає даних</td></tr>
+    </tbody>
+  </table>
+</div>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+let rows = [], filtered = [];
+
+function render(){
+  const tbody = document.getElementById('tbody');
+  if (!filtered.length){
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Немає даних</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(r => {
+    return '<tr>' +
+      '<td>' + (r.tx_time_utc || '') + '</td>' +
+      '<td>' + (r.exchange || '') + '</td>' +
+      '<td>' + (r.blockchain || '') + '</td>' +
+      '<td>' + (r.asset || '') + '</td>' +
+      '<td>' + (r.amount || 0) + '</td>' +
+      '<td class="' + r.direction + '">' + r.direction + '</td>' +
+      '<td>' + (r.from_address || '') + '</td>' +
+      '<td>' + (r.to_address || '') + '</td>' +
+      '<td>' + (r.tx_hash || '') + '</td>' +
+      '<td>' + (r.file_name || '') + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function applyFilters(){
+  const q = document.getElementById('search').value.toLowerCase();
+  const dir = document.getElementById('dir').value;
+  filtered = rows.filter(r => {
+    if (q && !Object.values(r).some(v => String(v).toLowerCase().includes(q))) return false;
+    if (dir !== 'all' && r.direction !== dir) return false;
+    return true;
+  });
+  render();
+}
+
+document.getElementById('search').addEventListener('input', applyFilters);
+document.getElementById('dir').addEventListener('change', applyFilters);
+
+document.getElementById('fileInput').addEventListener('change', async (e) => {
+  for (const file of e.target.files){
+    const ext = file.name.split('.').pop().toLowerCase();
+    let data = [];
+    if (ext === 'csv'){
+      const text = await file.text();
+      data = Papa.parse(text, { header: true }).data;
+    } else {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      data = XLSX.utils.sheet_to_json(ws);
+    }
+    rows = rows.concat(data.map(r => ({
+      tx_time_utc: r['Time(UTC)'] || r['tx_time_utc'] || '',
+      exchange: r['Exchange'] || r['exchange'] || '',
+      blockchain: r['Chain'] || r['blockchain'] || '',
+      asset: r['Asset'] || r['asset'] || '',
+      amount: r['Amount'] || r['amount'] || 0,
+      direction: r['Operation'] || r['direction'] || '',
+      from_address: r['From'] || r['from_address'] || '',
+      to_address: r['To'] || r['to_address'] || '',
+      tx_hash: r['Transaction ID'] || r['tx_hash'] || '',
+      file_name: file.name
+    })));
+  }
+  applyFilters();
+});
+
+document.getElementById('btnExport').addEventListener('click', () => {
+  if (!filtered.length) return;
+  const csv = Papa.unparse(filtered);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'export.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
