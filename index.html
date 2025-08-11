@@ -2,62 +2,236 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8" />
-<title>Переглядач біржових відповідей</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Переглядач біржових відповідей · укр</title>
+<link rel="preconnect" href="https://unpkg.com">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<style>
+  :root { --bg:#0b0e14; --card:#111624; --muted:#7d8da0; --text:#e8eef7; --border:#1e293b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--text); }
+  .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 22px; margin: 0 0 12px; }
+  .card { background: var(--card); border:1px solid var(--border); border-radius: 16px; }
+  .controls { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px; padding: 14px; }
+  .controls > * { min-width: 0; }
+  button, select, input[type="text"] { width:100%; padding:10px 12px; border-radius: 10px; border:1px solid var(--border); background:#0f1422; color:var(--text); outline:none; }
+  button { background: #1f2937; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  .btn-row { display:flex; gap:8px; justify-content:flex-end; grid-column: span 12; flex-wrap: wrap; }
+  .badge { display:inline-block; padding:2px 8px; border-radius: 999px; font-size: 12px; }
+  .badge.in { background: rgba(34,197,94,0.15); color:#86efac; border:1px solid rgba(34,197,94,0.35); }
+  .badge.out{ background: rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.35); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { position: sticky; top: 0; background: #0f1422; z-index: 1; }
+  th, td { border-bottom:1px solid var(--border); padding: 8px 10px; text-align: left; white-space: nowrap; }
+  td.trunc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  .scroll { overflow:auto; max-height: 70vh; border-radius: 0 0 16px 16px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .sum { font-size: 13px; color:#cbe3ff; }
+</style>
 </head>
 <body>
-<h1>Переглядач біржових відповідей</h1>
-<div>
-    <button id="db-load">База: Завантажити</button>
-    <button id="db-save">База: Зберегти</button>
+<div class="wrap">
+  <h1>Переглядач біржових відповідей · укр</h1>
+
+  <input id="fileInput" type="file" accept=".csv,.xlsx,.xls" multiple style="display:none" />
+  <div class="card">
+    <div class="controls">
+      <div style="grid-column: span 3;">
+        <button id="btnPick">Завантажити CSV/Excel</button>
+      </div>
+      <div style="grid-column: span 3;">
+        <input id="search" type="text" placeholder="Пошук (хеш, адреса, актив, біржа)" />
+      </div>
+      <div style="grid-column: span 2;">
+        <select id="dir">
+          <option value="all">Усі операції</option>
+          <option value="in">Вхідні</option>
+          <option value="out">Вихідні</option>
+        </select>
+      </div>
+      <div class="btn-row">
+        <button id="btnExport">Експорт CSV</button>
+        <button id="db-load">База: Завантажити</button>
+        <button id="db-save">База: Зберегти</button>
+      </div>
+    </div>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Час (UTC)</th><th>Біржа</th><th>Мережа</th><th>Актив</th>
+            <th>Сума</th><th>Напрям</th><th>From</th><th>To</th><th>Tx Hash</th><th>Файл</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:18px;">Немає даних. Додайте файли.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="hint">Підтримка CSV, XLSX, XLS. Кнопки «База» працюють із Neon Postgres. UPSERT без дублів по (exchange+tx_hash).</div>
+  <div class="sum" id="summary"></div>
 </div>
-<table id="data-table" border="1">
-    <thead>
-        <tr>
-            <th>Дата</th><th>Біржа</th><th>Блокчейн</th><th>Актив</th>
-            <th>Сума</th><th>Напрямок</th><th>Від</th><th>До</th><th>Хеш</th><th>Файл</th>
-        </tr>
-    </thead>
-    <tbody></tbody>
-</table>
+
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
-let rows = [];
+  const fileInput = document.getElementById('fileInput');
+  const btnPick   = document.getElementById('btnPick');
+  const tbody     = document.getElementById('tbody');
+  const search    = document.getElementById('search');
+  const dirSel    = document.getElementById('dir');
+  const btnExport = document.getElementById('btnExport');
+  const summary   = document.getElementById('summary');
 
-function renderTable() {
-    const tbody = document.querySelector('#data-table tbody');
-    tbody.innerHTML = '';
-    rows.forEach(r => {
-        const tr = document.createElement('tr');
-        Object.values(r).forEach(val => {
-            const td = document.createElement('td');
-            td.textContent = val || '';
-            tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
+  let rows = [];
+  let filtered = [];
+
+  function render(){
+    if (!filtered.length){
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:18px;">Немає даних</td></tr>';
+      summary.textContent = '';
+      return;
+    }
+    const html = filtered.map(r=>{
+      const badge = r.direction === 'in' ? '<span class="badge in">Вхідна</span>' :
+                    r.direction === 'out'? '<span class="badge out">Вихідна</span>' : '—';
+      return `<tr>
+        <td>${r.tx_time_utc||''}</td>
+        <td>${r.exchange||''}</td>
+        <td>${r.blockchain||''}</td>
+        <td>${r.asset||''}</td>
+        <td>${(r.amount??0)}</td>
+        <td>${badge}</td>
+        <td class="trunc" title="${r.from_address||''}">${r.from_address||''}</td>
+        <td class="trunc" title="${r.to_address||''}">${r.to_address||''}</td>
+        <td class="trunc" title="${r.tx_hash||''}">${r.tx_hash||''}</td>
+        <td>${r.file_name||''}</td>
+      </tr>`;
+    }).join('');
+    tbody.innerHTML = html;
+    const total = filtered.reduce((s,r)=> s + (Number(r.amount)||0), 0);
+    summary.textContent = `Записів: ${filtered.length} · Сума: ${total.toLocaleString()}`;
+  }
+
+  function applyFilters(){
+    const q = search.value.trim().toLowerCase();
+    const d = dirSel.value;
+    filtered = rows.filter(r=>{
+      if (q){
+        const hay = [r.exchange,r.tx_hash,r.asset,r.blockchain,r.from_address,r.to_address,r.file_name].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (d!=='all' && (r.direction||'')!==d) return false;
+      return true;
     });
-}
+    render();
+  }
 
-async function loadFromDb(){
+  function norm(r, fileName){
+    return {
+      tx_time_utc: r['Time(UTC)'] || r['tx_time_utc'] || r['Time'] || '',
+      exchange:    r['Exchange']  || r['exchange']    || '',
+      blockchain:  r['Chain']     || r['blockchain']  || r['Network'] || '',
+      asset:       r['Asset']     || r['asset']       || r['Coin']    || '',
+      amount:      r['Amount']    || r['amount']      || 0,
+      direction:   r['Operation'] || r['direction']   || r['Type']    || '',
+      from_address:r['From']      || r['from_address']|| '',
+      to_address:  r['To']        || r['to_address']  || '',
+      tx_hash:     r['Transaction ID'] || r['tx_hash'] || r['Tx Hash'] || '',
+      file_name:   fileName || ''
+    };
+  }
+
+  btnPick.addEventListener('click', ()=> fileInput.click());
+
+  fileInput.addEventListener('change', async (e)=>{
+    const files = Array.from(e.target.files||[]);
+    let incoming = [];
+    for (const file of files){
+      const ext = file.name.split('.').pop().toLowerCase();
+      let data = [];
+      if (ext==='csv'){
+        const text = await file.text();
+        data = Papa.parse(text, {header:true, skipEmptyLines:true}).data;
+      } else {
+        const buf = await file.arrayBuffer();
+        const wb  = XLSX.read(buf, {type:'array'});
+        const ws  = wb.Sheets[wb.SheetNames[0]];
+        data = XLSX.utils.sheet_to_json(ws, {defval:''});
+      }
+      incoming = incoming.concat(data.map(r=>norm(r, file.name)));
+    }
+    rows = rows.concat(incoming);
+    applyFilters();
+    fileInput.value = '';
+  });
+
+  search.addEventListener('input', applyFilters);
+  dirSel.addEventListener('change', applyFilters);
+
+  btnExport.addEventListener('click', ()=>{
+    if (!filtered.length){ alert('Немає даних для експорту'); return; }
+    const headers = Object.keys(filtered[0]);
+    const csvRows = [headers.join(',')];
+    for (const r of filtered){
+      const line = headers.map(h=>{
+        let v = (r[h] ?? '').toString().replace(/"/g,'""');
+        if (v.includes(',') || v.includes('"') || v.includes('\n')) v = '"' + v + '"';
+        return v;
+      }).join(',');
+      csvRows.push(line);
+    }
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'export.csv'; a.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+
+<script>
+  function toTableShape(r){
+    return {
+      tx_time_utc: r.tx_time_utc || r['Time(UTC)'] || '',
+      exchange:    r.exchange    || r['Exchange']  || '',
+      blockchain:  r.blockchain  || r['Chain']     || '',
+      asset:       r.asset       || r['Asset']     || '',
+      amount:      r.amount      || r['Amount']    || 0,
+      direction:   r.direction   || r['Operation'] || '',
+      from_address:r.from_address|| r['From']      || '',
+      to_address:  r.to_address  || r['To']        || '',
+      tx_hash:     r.tx_hash     || r['Transaction ID'] || '',
+      file_name:   r.file_name   || r['file_name'] || ''
+    };
+  }
+
+  async function loadFromDb(){
     const r = await fetch('/api/fetch');
+    if (!r.ok) return alert('Помилка читання з БД');
     const j = await r.json();
-    rows = j.data || [];
-    renderTable();
-    alert('✅ Дані завантажені');
-}
+    rows = (j.data || []).map(toTableShape);
+    applyFilters();
+    alert('✅ Дані завантажені з БД');
+  }
 
-async function saveToDb(){
-    if (!rows.length) return alert('Немає даних');
+  async function saveToDb(){
+    if (!rows || !rows.length) return alert('Немає даних у таблиці');
     const r = await fetch('/api/upload', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ rows })
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ rows: rows.map(toTableShape) })
     });
+    if (!r.ok) return alert('Помилка збереження у БД');
     const j = await r.json();
     alert('✅ Записано: ' + j.inserted);
-}
+  }
 
-document.getElementById('db-load').addEventListener('click', loadFromDb);
-document.getElementById('db-save').addEventListener('click', saveToDb);
+  document.getElementById('db-load').addEventListener('click', loadFromDb);
+  document.getElementById('db-save').addEventListener('click', saveToDb);
 </script>
 </body>
 </html>
