@@ -7,7 +7,7 @@
 <script type="module">
 // ===== Firebase =====
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCeE3Sm3omKS3CvZEAUrDWNy75CQMSYFYs",
@@ -28,7 +28,9 @@ let tableData = [];
 async function loadFromFirestore() {
   const querySnapshot = await getDocs(collection(db, "uploads"));
   tableData = [];
-  querySnapshot.forEach(doc => tableData.push(doc.data()));
+  querySnapshot.forEach(doc => {
+    tableData.push(doc.data());
+  });
   renderTable(tableData);
 }
 
@@ -44,12 +46,19 @@ document.getElementById('fileInput').addEventListener('change', async function(e
     const sheetName = workbook.SheetNames[0];
     const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-    tableData = sheet;
-    renderTable(sheet);
+    tableData = sheet.map(row => ({
+      ...row,
+      Дата_завантаження: new Date().toLocaleString() // додаємо дату для відображення
+    }));
 
-    // Зберегти у Firestore
-    for (let row of sheet) {
-      await addDoc(collection(db, "uploads"), row);
+    renderTable(tableData);
+
+    // Зберегти у Firestore з міткою часу
+    for (let row of tableData) {
+      await addDoc(collection(db, "uploads"), {
+        ...row,
+        timestamp: serverTimestamp()
+      });
     }
     alert("Дані збережено у Firestore!");
   };
