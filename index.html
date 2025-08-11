@@ -1,97 +1,117 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
-  <meta charset="UTF-8">
-  <title>Завантаження CSV/Excel у Firestore</title>
-  <script type="module">
-    // ===== Імпорт Firebase SDK =====
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-    import * as XLSX from "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm";
+<meta charset="UTF-8">
+<title>Відомості з Firestore</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script type="module">
+// ===== Firebase =====
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-    // ===== Конфігурація Firebase =====
-    const firebaseConfig = {
-      apiKey: "AIzaSyCeE3Sm3omKS3CvZEAUrDWNy75CQMSYFYs",
-      authDomain: "cex-database.firebaseapp.com",
-      projectId: "cex-database",
-      storageBucket: "cex-database.firebasestorage.app",
-      messagingSenderId: "140570970101",
-      appId: "1:140570970101:web:f27b59f08c865bae0f42bc",
-      measurementId: "G-CP4E1QQKRW"
-    };
+const firebaseConfig = {
+  apiKey: "AIzaSyCeE3Sm3omKS3CvZEAUrDWNy75CQMSYFYs",
+  authDomain: "cex-database.firebaseapp.com",
+  projectId: "cex-database",
+  storageBucket: "cex-database.firebasestorage.app",
+  messagingSenderId: "140570970101",
+  appId: "1:140570970101:web:f27b59f08c865bae0f42bc",
+  measurementId: "G-CP4E1QQKRW"
+};
 
-    // ===== Ініціалізація Firebase =====
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-    // ===== Завантаження файлу у Firestore =====
-    document.getElementById("uploadForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const file = document.getElementById("fileInput").files[0];
-      if (!file) return alert("Виберіть файл!");
+let tableData = [];
 
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(sheet);
+// ===== Завантаження даних з Firestore =====
+async function loadFromFirestore() {
+  const querySnapshot = await getDocs(collection(db, "uploads"));
+  tableData = [];
+  querySnapshot.forEach(doc => tableData.push(doc.data()));
+  renderTable(tableData);
+}
 
-      for (let row of json) {
-        await addDoc(collection(db, "uploads"), row);
-      }
+// ===== Завантаження CSV/Excel у Firestore =====
+document.getElementById('fileInput').addEventListener('change', async function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
 
-      alert("Дані завантажено у Firestore!");
-      loadData(); // оновити таблицю
-    });
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const data = new Uint8Array(e.target.result);
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-    // ===== Вивід даних з Firestore =====
-    async function loadData() {
-      const querySnapshot = await getDocs(collection(db, "uploads"));
-      const rows = [];
-      querySnapshot.forEach((doc) => rows.push(doc.data()));
+    tableData = sheet;
+    renderTable(sheet);
 
-      if (rows.length > 0) {
-        const tableHead = document.getElementById("table-head");
-        const tableBody = document.getElementById("table-body");
-
-        // Заголовки
-        tableHead.innerHTML = "";
-        Object.keys(rows[0]).forEach(key => {
-          const th = document.createElement("th");
-          th.textContent = key;
-          tableHead.appendChild(th);
-        });
-
-        // Рядки
-        tableBody.innerHTML = "";
-        rows.forEach(row => {
-          const tr = document.createElement("tr");
-          Object.values(row).forEach(value => {
-            const td = document.createElement("td");
-            td.textContent = value;
-            tr.appendChild(td);
-          });
-          tableBody.appendChild(tr);
-        });
-      }
+    // Зберегти у Firestore
+    for (let row of sheet) {
+      await addDoc(collection(db, "uploads"), row);
     }
+    alert("Дані збережено у Firestore!");
+  };
+  reader.readAsArrayBuffer(file);
+});
 
-    // Завантаження даних при старті
-    loadData();
-  </script>
+// ===== Побудова таблиці =====
+function renderTable(data) {
+  const tableHead = document.getElementById('tableHead');
+  const tableBody = document.getElementById('tableBody');
+  tableHead.innerHTML = "";
+  tableBody.innerHTML = "";
+
+  if (data.length === 0) return;
+
+  // Заголовки
+  const headerRow = document.createElement('tr');
+  Object.keys(data[0]).forEach(key => {
+    const th = document.createElement('th');
+    th.textContent = key;
+    headerRow.appendChild(th);
+  });
+  tableHead.appendChild(headerRow);
+
+  // Рядки
+  data.forEach(row => {
+    const tr = document.createElement('tr');
+    Object.values(row).forEach(value => {
+      const td = document.createElement('td');
+      td.textContent = value;
+      tr.appendChild(td);
+    });
+    tableBody.appendChild(tr);
+  });
+}
+
+// ===== Експорт у Excel =====
+document.getElementById('exportBtn').addEventListener('click', function() {
+  if (tableData.length === 0) {
+    alert("Немає даних для експорту!");
+    return;
+  }
+  const ws = XLSX.utils.json_to_sheet(tableData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Відомості");
+  XLSX.writeFile(wb, "vydomosti.xlsx");
+});
+
+// Завантажити дані при старті
+loadFromFirestore();
+</script>
 </head>
 <body>
-  <h1>Завантаження CSV/Excel у Firestore</h1>
-  <form id="uploadForm">
-    <input type="file" id="fileInput" accept=".csv, .xlsx" />
-    <button type="submit">Завантажити</button>
-  </form>
+<h1>Відомості з Firestore</h1>
 
-  <h2>Дані з Firestore</h2>
-  <table border="1">
-    <thead>
-      <tr id="table-head"></tr>
-    </thead>
-    <tbody id="table-body"></tbody>
-  </table>
+<input type="file" id="fileInput" accept=".csv, .xlsx, .xls">
+<button id="exportBtn">💾 Вивантажити таблицю</button>
+
+<table border="1" id="dataTable">
+  <thead id="tableHead"></thead>
+  <tbody id="tableBody"></tbody>
+</table>
+
 </body>
 </html>
