@@ -2,125 +2,74 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
-<title>Відомості з Firestore</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script type="module">
-// ===== Firebase =====
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCeE3Sm3omKS3CvZEAUrDWNy75CQMSYFYs",
-  authDomain: "cex-database.firebaseapp.com",
-  projectId: "cex-database",
-  storageBucket: "cex-database.firebasestorage.app",
-  messagingSenderId: "140570970101",
-  appId: "1:140570970101:web:f27b59f08c865bae0f42bc",
-  measurementId: "G-CP4E1QQKRW"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-let tableData = [];
-
-// ===== Завантаження даних з Firestore =====
-async function loadFromFirestore() {
-  const querySnapshot = await getDocs(collection(db, "uploads"));
-  tableData = [];
-  querySnapshot.forEach(doc => {
-    tableData.push(doc.data());
-  });
-  renderTable(tableData);
-}
-
-// ===== Завантаження CSV/Excel у Firestore =====
-document.getElementById('fileInput').addEventListener('change', async function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    const data = new Uint8Array(e.target.result);
-    const workbook = XLSX.read(data, { type: 'array' });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-
-    tableData = sheet.map(row => ({
-      ...row,
-      Дата_завантаження: new Date().toLocaleString() // додаємо дату для відображення
-    }));
-
-    renderTable(tableData);
-
-    // Зберегти у Firestore з міткою часу
-    for (let row of tableData) {
-      await addDoc(collection(db, "uploads"), {
-        ...row,
-        timestamp: serverTimestamp()
-      });
-    }
-    alert("Дані збережено у Firestore!");
-  };
-  reader.readAsArrayBuffer(file);
-});
-
-// ===== Побудова таблиці =====
-function renderTable(data) {
-  const tableHead = document.getElementById('tableHead');
-  const tableBody = document.getElementById('tableBody');
-  tableHead.innerHTML = "";
-  tableBody.innerHTML = "";
-
-  if (data.length === 0) return;
-
-  // Заголовки
-  const headerRow = document.createElement('tr');
-  Object.keys(data[0]).forEach(key => {
-    const th = document.createElement('th');
-    th.textContent = key;
-    headerRow.appendChild(th);
-  });
-  tableHead.appendChild(headerRow);
-
-  // Рядки
-  data.forEach(row => {
-    const tr = document.createElement('tr');
-    Object.values(row).forEach(value => {
-      const td = document.createElement('td');
-      td.textContent = value;
-      tr.appendChild(td);
-    });
-    tableBody.appendChild(tr);
-  });
-}
-
-// ===== Експорт у Excel =====
-document.getElementById('exportBtn').addEventListener('click', function() {
-  if (tableData.length === 0) {
-    alert("Немає даних для експорту!");
-    return;
-  }
-  const ws = XLSX.utils.json_to_sheet(tableData);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Відомості");
-  XLSX.writeFile(wb, "vydomosti.xlsx");
-});
-
-// Завантажити дані при старті
-loadFromFirestore();
-</script>
+<title>Переглядач біржових відповідей · укр</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; background: #0b0e14; color: #e8eef7; }
+  .container { max-width: 1200px; margin: auto; padding: 20px; }
+  h1 { font-size: 22px; margin-bottom: 10px; }
+  button, select, input { padding: 8px; border-radius: 5px; border: 1px solid #1e293b; background: #1f2937; color: #fff; }
+  button:hover { background: #374151; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { padding: 8px; border: 1px solid #1e293b; }
+  th { background: #111624; position: sticky; top: 0; }
+  .in { color: #86efac; }
+  .out { color: #fca5a5; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+</style>
 </head>
 <body>
-<h1>Відомості з Firestore</h1>
+<div class="container">
+  <h1>Переглядач біржових відповідей · укр</h1>
 
-<input type="file" id="fileInput" accept=".csv, .xlsx, .xls">
-<button id="exportBtn">💾 Вивантажити таблицю</button>
+  <div class="row">
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" multiple>
+    <input type="text" id="search" placeholder="Пошук...">
+    <select id="dir">
+      <option value="all">Усі операції</option>
+      <option value="in">Вхідні</option>
+      <option value="out">Вихідні</option>
+    </select>
+    <button id="btnExport">Експорт CSV</button>
+    <button id="btnRefresh">Оновити з бази</button>
+  </div>
 
-<table border="1" id="dataTable">
-  <thead id="tableHead"></thead>
-  <tbody id="tableBody"></tbody>
-</table>
+  <table>
+    <thead>
+      <tr>
+        <th>Час (UTC)</th>
+        <th>Біржа</th>
+        <th>Мережа</th>
+        <th>Актив</th>
+        <th>Сума</th>
+        <th>Напрям</th>
+        <th>From</th>
+        <th>To</th>
+        <th>Tx Hash</th>
+        <th>Файл</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr><td colspan="10" style="text-align:center;">Немає даних</td></tr>
+    </tbody>
+  </table>
+</div>
 
-</body>
-</html>
+<!-- Парсери CSV/Excel -->
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<!-- Firebase (ESM) -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import {
+    getFirestore, collection, getDocs, doc, writeBatch, serverTimestamp, setDoc
+  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+  // 🔹 ТВОЯ конфігурація Firebase (із консолі Firebase)
+  const firebaseConfig = {
+    apiKey: "AIzaSyCeE3Sm3omKS3CvZEAUrDWNy75CQMSYFYs",
+    authDomain: "cex-database.firebaseapp.com",
+    projectId: "cex-database",
+    storageBucket: "cex-database.firebasestorage.app",
+    messagingSenderId: "14057
