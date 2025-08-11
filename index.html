@@ -1,134 +1,31 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Переглядач біржових відповідей · укр</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://unpkg.com">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
 <style>
-  body { font-family: Arial, sans-serif; margin: 0; background: #0b0e14; color: #e8eef7; }
-  .container { max-width: 1200px; margin: auto; padding: 20px; }
-  h1 { font-size: 22px; margin-bottom: 10px; }
-  button, select, input { padding: 8px; border-radius: 5px; border: 1px solid #1e293b; background: #1f2937; color: #fff; }
-  button:hover { background: #374151; cursor: pointer; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { padding: 8px; border: 1px solid #1e293b; }
-  th { background: #111624; position: sticky; top: 0; }
-  .in { color: #86efac; }
-  .out { color: #fca5a5; }
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>Переглядач біржових відповідей · укр</h1>
-  <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" multiple>
-  <input type="text" id="search" placeholder="Пошук...">
-  <select id="dir">
-    <option value="all">Усі операції</option>
-    <option value="in">Вхідні</option>
-    <option value="out">Вихідні</option>
-  </select>
-  <button id="btnExport">Експорт CSV</button>
-  <table>
-    <thead>
-      <tr>
-        <th>Час (UTC)</th>
-        <th>Біржа</th>
-        <th>Мережа</th>
-        <th>Актив</th>
-        <th>Сума</th>
-        <th>Напрям</th>
-        <th>From</th>
-        <th>To</th>
-        <th>Tx Hash</th>
-        <th>Файл</th>
-      </tr>
-    </thead>
-    <tbody id="tbody">
-      <tr><td colspan="10" style="text-align:center;">Немає даних</td></tr>
-    </tbody>
-  </table>
-</div>
-<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script>
-let rows = [], filtered = [];
-
-function render(){
-  const tbody = document.getElementById('tbody');
-  if (!filtered.length){
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Немає даних</td></tr>';
-    return;
-  }
-  tbody.innerHTML = filtered.map(r => {
-    return '<tr>' +
-      '<td>' + (r.tx_time_utc || '') + '</td>' +
-      '<td>' + (r.exchange || '') + '</td>' +
-      '<td>' + (r.blockchain || '') + '</td>' +
-      '<td>' + (r.asset || '') + '</td>' +
-      '<td>' + (r.amount || 0) + '</td>' +
-      '<td class="' + r.direction + '">' + r.direction + '</td>' +
-      '<td>' + (r.from_address || '') + '</td>' +
-      '<td>' + (r.to_address || '') + '</td>' +
-      '<td>' + (r.tx_hash || '') + '</td>' +
-      '<td>' + (r.file_name || '') + '</td>' +
-    '</tr>';
-  }).join('');
-}
-
-function applyFilters(){
-  const q = document.getElementById('search').value.toLowerCase();
-  const dir = document.getElementById('dir').value;
-  filtered = rows.filter(r => {
-    if (q && !Object.values(r).some(v => String(v).toLowerCase().includes(q))) return false;
-    if (dir !== 'all' && r.direction !== dir) return false;
-    return true;
-  });
-  render();
-}
-
-document.getElementById('search').addEventListener('input', applyFilters);
-document.getElementById('dir').addEventListener('change', applyFilters);
-
-document.getElementById('fileInput').addEventListener('change', async (e) => {
-  for (const file of e.target.files){
-    const ext = file.name.split('.').pop().toLowerCase();
-    let data = [];
-    if (ext === 'csv'){
-      const text = await file.text();
-      data = Papa.parse(text, { header: true }).data;
-    } else {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      data = XLSX.utils.sheet_to_json(ws);
-    }
-    rows = rows.concat(data.map(r => ({
-      tx_time_utc: r['Time(UTC)'] || r['tx_time_utc'] || '',
-      exchange: r['Exchange'] || r['exchange'] || '',
-      blockchain: r['Chain'] || r['blockchain'] || '',
-      asset: r['Asset'] || r['asset'] || '',
-      amount: r['Amount'] || r['amount'] || 0,
-      direction: r['Operation'] || r['direction'] || '',
-      from_address: r['From'] || r['from_address'] || '',
-      to_address: r['To'] || r['to_address'] || '',
-      tx_hash: r['Transaction ID'] || r['tx_hash'] || '',
-      file_name: file.name
-    })));
-  }
-  applyFilters();
-});
-
-document.getElementById('btnExport').addEventListener('click', () => {
-  if (!filtered.length) return;
-  const csv = Papa.unparse(filtered);
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'export.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-});
-</script>
-</body>
-</html>
+  :root { --bg:#0b0e14; --card:#111624; --muted:#7d8da0; --text:#e8eef7; --accent:#5ac8fa; --ok:#22c55e; --bad:#ef4444; --border:#1e293b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--text); }
+  .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 22px; margin: 0 0 12px; }
+  .card { background: var(--card); border:1px solid var(--border); border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
+  .controls { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px; padding: 14px; }
+  .controls > * { min-width: 0; }
+  button, select, input[type="text"], input[type="file"] { width:100%; padding:10px 12px; border-radius: 12px; border:1px solid var(--border); background:#0f1422; color:var(--text); outline:none; }
+  button { background: #1f2937; cursor: pointer; }
+  button.primary { background: #2b3546; border-color:#2f3f5b; }
+  button:hover { filter: brightness(1.1); }
+  .btn-row { display:flex; gap:8px; justify-content:flex-end; grid-column: span 12; }
+  .badge { display:inline-block; padding:2px 8px; border-radius: 999px; font-size: 12px; }
+  .badge.in { background: rgba(34,197,94,0.15); color:#86efac; border:1px solid rgba(34,197,94,0.35); }
+  .badge.out{ background: rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.35); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { position: sticky; top: 0; background: #0f1422; z-index: 1; }
+  th, td { border-bottom:1px solid var(--border); padding: 8px 10px; text-align: left; white-space: nowrap; }
+  td.trunc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  .scroll { overflow:auto; max-height: 70vh; border-radius: 0 0 16px 16px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
